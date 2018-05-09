@@ -1,0 +1,128 @@
+\documentclass[10pt]{article}
+
+\usepackage[utf8x]{inputenc}
+\usepackage{fullpage}
+\usepackage{graphicx}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+%\usepackage[authoryear]{natbib}
+\usepackage{soul}
+\usepackage{color}
+
+
+\begin{document}
+
+\title{Libri: high-performance decentralized storage for health data}
+\author{Drausin Wulsin}
+\maketitle
+
+\begin{abstract}
+TODO
+\end{abstract}
+
+\section{Introduction}
+% - problems w/ health data
+% 	- existing orgs
+% 	- why so hard to share
+% 	- security
+% - decentralized storage landscape
+% 	- non-blockchain (BitTorrent, IPFS, Chord, Kademlia)
+% 	- blockchain (Sia, Storj, Ethereum Swarm, Filecoin)
+% - challenges of blockchain
+% 	- scale
+% 	- maintainability
+% - Libri solution
+% - neutral, durable storage for any health data
+% 	- problems it does not try to solve (right now)
+
+\section{Architecture}
+% - librarian & author nomenclature
+% - no blockchain
+
+\subsection{Kademlia storage protocol}
+% - storage: same Kademlia framework as others
+% - API
+%	- keys hashes of serialized docs
+% - librarians peers
+% 	- mechanics of a simple Put & Get
+
+\subsection{Clients}
+% - author clients
+% 	- documents
+% 		- immutability
+% 		- entries, pages, & envelopes
+% 		- E2E enc baked into API
+% 	- compression
+% 	- mechanics of simple doc upload & share
+
+\subsection{Identity}
+% - identity
+% 	- author & reader keys
+% 	- organizations
+% 	- known orgs & trust
+% 	- request signatures
+
+\subsection{Incentives}
+% - incentives
+% 	- large orgs: access to data
+% 		- less incentive for smaller orgs and indivs: ok!
+% 	- rate limits
+% 	- authorization
+% 	- health checks
+% - authorization
+
+\subsection{Storage event log}
+% - event log: publications & subscriptions
+
+\subsection{Durability}
+% - durability
+% 	- replication & verification
+% 	- peer & org drop outs
+
+\subsection{Protecting against malicious actors}
+% - protecting against malicious activity
+% 	- DDOS, spam, Sybil, ???
+
+\section{Implementation}
+% - grpc
+% - local storage: RocksDB
+% 	- backed by network-attached SSDs (PD/EBS)
+% 	- also backed up to GCP/S3
+% - librarian peers packaged as Docker containers
+% - clusters run on Kubernetes via Google Container Cluster
+% - metrics, alerting, and monitorig via Prometheus & Grafana
+% - hypothetical organization's setup
+% 	- 8 librarian peers
+% 	- author service that handles compression, pagination, & encryption
+% 	- internal systems talk with author service to get and retrieve plaintext data
+
+\section{Experiments}
+% - cluster performance over size & load
+% 	- {8, 16, 32, 64}-node cluster @ {64K, 256K, 1024K} UPD
+% - specific scenarios
+% 	- peer drop-out triggering re-replication             
+% 	- malicious Getters & Putters
+
+\section{Future work}
+% - community: fully open source
+% 	- development and initial hosting led by Elixir Health
+% 		- will offer optional paid services
+% 			- mobile & web apps
+% 			- identity management
+% 			- proxy APIs to libri
+% 	- welcome all members of healthcare ecosystem
+% 		- doctors & healthcare systems
+% 		- public and private insurance organizations
+% 		- life sciences & device companies
+% 		- public health & medical research organizations
+% 		- consumer health organizations (gym, step & diet trackers)
+% - future work
+% 	- data formats
+% 	- integrations with healthcare organizations
+% 	- more exps
+% 		- heterogenous clusters across diff orgs & AZs
+% 		- malicious actors
+% 	- wild staging & prod cluster across orgs
+
+\end{document}
