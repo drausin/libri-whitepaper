@@ -2,3 +2,7 @@
 *.out
 *.aux
 *.pdf
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+out/*
