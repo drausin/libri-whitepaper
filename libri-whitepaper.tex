@@ -38,25 +38,66 @@ TODO
 
 \section{Architecture}
 % - librarian & author nomenclature
+% - librarian responsibilities
+% 	- storing & returning values for given key
+% 	- keeping track of (some of) other peers in the network
+% 	- gossiping publication events
+% 	- re-replicating data if it becomes under-replicated
+% - author responsibilities
+% 	- uploading, downloading, & sharing documents to/from Libri
+% 		- compression
+% 		- pagination
+% 		- end-to-end encryption
 % - no blockchain
+% 	- instead of single, immutable log of all storage events, each node has its own log
+% 	- if you want history, from before your node, consult published logs of other nodes
+
+Peers in the Libri network are called Librarians, and clients of these peers are called Authors. Librarians are responsible for 
+\begin{itemize}
+	\item storing and retrieving key-value pairs,
+	\item maintaing routing table of other peers in the network,
+	\item gossiping store events to other peers,
+	\item re-replicating data if it becomes under-replicated.
+\end{itemize}
+The storing/retrieving and routing table behave quite similarly to a standard Kademlia storage network, and the store event gossiping and re-replication responsibilities add two important capabilities on top of it. 
+
+Each Librarian and Author has an identity defined by the 256-bit public key of an secp256k1 ECDSA key-pair. Librarians and Authors sign each of their requests with their private key (see \label{sec:Identity} below for more details), and each Libarian's public key also defines its location on the Kademlia hash ring. Using a public key for peer identity and request signing closely follows the approach in S/Kademlia, though the node ID is just the public key rather than a hash of it as in S/Kademlia. 
+
+Authors are responsible for uploading, downloading, and sharing documents in the Libri network. In these capacities, they handle
+\begin{itemize}
+	\item compression & decompression,
+	\item pagination & concatenation,
+	\item encryption & decryption,
+	\item Libri network Put & Get requests.
+\end{itemize}
+
+
+
+
+
+
 
 \subsection{Kademlia storage protocol}
 % - storage: same Kademlia framework as others
 % - API
 %	- keys hashes of serialized docs
-% - librarians peers
-% 	- mechanics of a simple Put & Get
-
-\subsection{Clients}
-% - author clients
 % 	- documents
 % 		- immutability
 % 		- entries, pages, & envelopes
 % 		- E2E enc baked into API
+% - librarians peers
+% 	- mechanics of a simple Put & Get
+
+\subsection{Authors}
+\label{sec:Authors}
+% - author clients
 % 	- compression
+% 	- pagination
+% 	- end-to-end encryption
 % 	- mechanics of simple doc upload & share
 
 \subsection{Identity}
+\label{sec:Identity}
 % - identity
 % 	- author & reader keys
 % 	- organizations
@@ -85,17 +126,26 @@ TODO
 % 	- DDOS, spam, Sybil, ???
 
 \section{Implementation}
-% - grpc
-% - local storage: RocksDB
-% 	- backed by network-attached SSDs (PD/EBS)
-% 	- also backed up to GCP/S3
-% - librarian peers packaged as Docker containers
-% - clusters run on Kubernetes via Google Container Cluster
-% - metrics, alerting, and monitorig via Prometheus & Grafana
-% - hypothetical organization's setup
-% 	- 8 librarian peers
-% 	- author service that handles compression, pagination, & encryption
-% 	- internal systems talk with author service to get and retrieve plaintext data
+
+Libri is implemented to be as simple to develop and maintain as possible. We thus use off-the-shelf tools when available and strive to be specific and opinionated rather than overly flexible and generic. Below we describe some implementation details. 
+
+
+\subsection{Librarian peers}
+Librarian peers are intended to be run from Docker containers in a cloud provider, like Google or Amazon. These containers are orchestrated via Terraform and Kubernetes, which also manage the persistent SSDs attached to each container for storage, a Prometheus server for monitoring and alerting, and Grafana server for dashboards. While it certainly is possible to run a Librarian peer on a laptop, we orient towards cloud deployment and infrastructure to standardize configuration and make use of the superior reliability, performance, and features offered there. 
+
+Each Librarian exposes an RPC service over http. The service interface is defined in GRPC, which uses Protobuf for message serialization. GRPC has been battle-tested at Google for over the last decade and has server and client libraries in most common languages. It also has nice features like streaming endpoints, which we use when gossiping publication events between peers. We expect to only develop and maintain a single server implementation in Golang. 
+
+Librarians use RocksDB for local storage. RocksDB is an embedded key-value store maintained by Facebook and is optimized for fast writes on SSDs. Each Librarian's RocksDB directory is written to a network-attached SSD volume, which is incrementally backed up to durable cloud storage (e.g., S3). 
+
+
+\subsection{Hypothetical organization's setup}
+
+An organization runs peers to get read/write access to the DHT as well as the stream of all publication events. A modest integration might look like the following. [diagram]
+
+The organization runs 8 peers that bootstrap from long-lived peers and introduce themselves to the rest of the Libri network. They may also have an internal service that uses the Author client library to proxy Put and Get requests to Libri via their 8 Librarian peers. This service may also send publication notifications on to an internal message buse (like Kafka) or filter them down to only those involving that organization (via their set of public keys). If they see that someone just shared a document with one of their public keys, they could then use Author client library download, decrypt, decompress, and concatenate the relevant Pages before storing in their own internal data system (which presumably uses its own encryption at rest and in transit).
+
+Smaller organizations and almost all consumers will not want to run their own peers. We expect an ecosystem of 3rd-party companies to build consumer-facing apps and APIs that will proxy access to the data in Libri much like companies like Coinbase proxy a consmer's access to the underlying Bitcoin network.
+
 
 \section{Experiments}
 % - cluster performance over size & load
