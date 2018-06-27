@@ -1,7 +1,7 @@
 \documentclass[10pt]{article}
 
 \usepackage[utf8x]{inputenc}
-\usepackage{fullpage}
+%\usepackage{fullpage}
 \usepackage{graphicx}
 \usepackage{algorithmicx}
 \usepackage{algpseudocode}
@@ -9,6 +9,10 @@
 %\usepackage[authoryear]{natbib}
 \usepackage{soul}
 \usepackage{color}
+
+\def\Entry{\texttt{Entry}}
+\def\Page{\texttt{Page}}
+\def\Envelope{\texttt{Envelope}}
 
 
 \begin{document}
@@ -54,30 +58,29 @@ TODO
 
 Peers in the Libri network are called Librarians, and clients of these peers are called Authors. Librarians are responsible for 
 \begin{itemize}
-	\item storing and retrieving key-value pairs,
+	\item storing and retrieving documents,
 	\item maintaing routing table of other peers in the network,
 	\item gossiping store events to other peers,
 	\item re-replicating data if it becomes under-replicated.
 \end{itemize}
-The storing/retrieving and routing table behave quite similarly to a standard Kademlia storage network, and the store event gossiping and re-replication responsibilities add two important capabilities on top of it. 
+The storing/retrieving and routing table behave quite similarly to a standard Kademlia storage network, and the store event gossiping and re-replication responsibilities add two important capabilities on top of it. Section \label{sec:API} below describes the Librarian API in more detail.
 
 Each Librarian and Author has an identity defined by the 256-bit public key of an secp256k1 ECDSA key-pair. Librarians and Authors sign each of their requests with their private key (see \label{sec:Identity} below for more details), and each Libarian's public key also defines its location on the Kademlia hash ring. Using a public key for peer identity and request signing closely follows the approach in S/Kademlia, though the node ID is just the public key rather than a hash of it as in S/Kademlia. 
 
-Authors are responsible for uploading, downloading, and sharing documents in the Libri network. In these capacities, they handle
+Authors are responsible for uploading, downloading, and sharing content in the Libri network. In these capacities, they handle
 \begin{itemize}
-	\item compression & decompression,
-	\item pagination & concatenation,
-	\item encryption & decryption,
-	\item Libri network Put & Get requests.
+	\item compression \& decompression,
+	\item pagination \& concatenation,
+	\item end-to-end encryption \& decryption,
+	\item Libri network Put \& Get requests.
 \end{itemize}
 
+Author clients by default compress all data with gzip unless otherwise specified. This compressed stream is then split up into pages (or chunks) of 2MB or less. Each page is individually encrypted and uploaded (via a Put request) to Libri. When retrieving data from Libri, the author client is also responsible for the reverse process of downloading, decrypting, concatenating, and decompressing the chunks into the orignial byte stream that was uploaded.
 
+Both Librarians and Authors may subscribe to the gossipped store events of other Librarians. Usually each Librarian or Authors will want to receive a complete log of all events. In a blockchain-based system, there might be a single log. In Libri, each client maintains its own log, which with very high probability captures all store event. The individual logs of each client should have exactly the same events in them, but very small differences in ordering and timing (< 1s) will exist due to gossip path differences. We believe these small differences are well worth the performance benefits and implementation simplicity of avoiding a blockchain. We expect organizations running fleets of nodes will post consolidated versions of these store logs for the public to download and compare, if they desire.
 
-
-
-
-
-\subsection{Kademlia storage protocol}
+\subsection{Librarian API}
+\label{sec:API}
 % - storage: same Kademlia framework as others
 % - API
 %	- keys hashes of serialized docs
@@ -87,14 +90,99 @@ Authors are responsible for uploading, downloading, and sharing documents in the
 % 		- E2E enc baked into API
 % - librarians peers
 % 	- mechanics of a simple Put & Get
+Each Librarian exposes a synchronous service with the following endpoints:
+\begin{itemize}
+	\item Introduce receives a peer ID and IP address and returns a random sample of other peers from the routing table.
+	\item Find receives a key and returns either the value for that key if present or the $k$ closest peers from the routing table to it.
+	\item Verify receives a key and an HMAC key and returns either the SHA-256 HMAC of the value for that key, if present, or the $k$ closest peers from the routing table to it.
+	\item Store receives a key-value pair to store at that peer.
+	\item Get receives a key and returns the value for that key, if it exists, managing the recursive Find operations for the client.
+	\item Put receives a key-value pair and stores the value in the appropriate peers, managing the recursive Find and final Store operations for the client.
+	\item Subscribe receives reader and author public key Bloom filters and (continually) streams Publications matching the filters to the client.
+\end{itemize}
 
-\subsection{Authors}
-\label{sec:Authors}
-% - author clients
-% 	- compression
-% 	- pagination
-% 	- end-to-end encryption
-% 	- mechanics of simple doc upload & share
+The Find and Store endpoints follow the standard Kademlia protocol. Introduce is used when a new peer is created and needs to bootstrap some initial other peers into its routing table. Verify, used by peers to ensure sufficient replication among other peers of the documents they contain, behaves very simiarlly to Find except that it returns an HMAC instead of the value. Get and Put are mostly intended for Authors to call (rather than other Librarians), especially since they involve the receiver of the call making a number of Find and/or Store calls. In Section \ref{sec:Incentives}, we discuss authorization and rate limits for endpoints between peers and clients.
+
+Subscribe allows peers to listen to the publications (eminating from or relayed through) other peers. Librarians will usually subscribe to the $O(10)$ other Librarians, receiving close to 100\% of each subscribed peer's publications, meaning that each peer would receive at least one publication notification for every true publication event with very high probability. Authors not interested in the full publication log would instead subscribe to $O(10)$ Librarians with Bloom filters for specific sets of author and/or reader public keys that it is interested in.
+
+\subsection{Libri Documents}
+\label{sec:Docs}
+% - key & binary value
+% - doc types
+% 	- entry
+% 	- page
+% 	- envelope
+% - publicationa
+% - metadata
+% - schemas
+Libri documents take one of three forms:
+\begin{itemize}
+	\item \Page{} holds a particular sequential chunk of the (compressed) document content. 
+	\item \Entry{} holds the encrypted contents of the document, either as a single Page, or as a list of keys to separate Page documents.
+	\item \Envelope{} contains the encrypted AES-256 entry encryption key (EEK) between a given author and a given reader.
+\end{itemize}
+Documents are serialized to a binary representation for storage in Libri. The key of any document is the \texttt{SHA-256} hash of its value bytes. Below we discuss some particulares of each document type.
+
+\subsubsection{Page}
+A \Page{} contains some or all of the content for a single document. The maximum \Page {} content size is 2 MB, and assume at least 50\% of documents will have sizes less than 2 MB. For now, our pagination strategy is very simple: we just split the (compressed) plaintext of the content into consecutive 2 MB chunks. We believe that this staightforward approach, combined with a reasonable replication strategy (e.g., 3-5x) will be sufficient to ensure clients always have access to the requisite chunks required to reconstruct their document. If this assumption proves problematic, we can always implement more sophisticated chunking via erasure coding in the clients. The Libri server code is agnostic to the chunking strategy.
+
+Each \Page{} document has the public key of the author that created it, the index of the particular \Page{} to define the order in which subsequent \Page{}'s plaintext content should be concatenated, the ciphertext of the \Page{}'s portion of the content, and the ciphertext MAC. 
+
+\subsubsection{Entry}
+An \Entry{} defines the content of the document. If the total content can fit on a single \Page{}, the \Entry{} contains that \Page{} within it. That single \Page{} is not stored separately in Libri. If the content is large enough to require splitting across multiple \Page{}s, the \Entry{} just contains 
+
+
+\subsubsection{Envelope}
+When someone with a document wants to share it with someone else, they generate a 108-byte entry encryption key (EEK), comprised of four sub-keys:
+\begin{itemize}
+	\item 32 byte \texttt{AES-256} key for \Page{} and entry metadata encryption (\texttt{Entry-AES-key}),
+	\item 32 byte \Page{} block cipher initialization vector (IV) seed (\texttt{Page-IV-seed})
+	\item 32 byte \texttt{SHA-256-HMAC} key for ciphertext MACs (\texttt{ciphertext-HMAC-key}),
+	\item 12 byte metadata block cipher IV (\texttt{Meta-IV}).
+\end{itemize}
+
+The contents in each \Page{} and the \Entry{} metadata are encrypted via an \texttt{AES-256} block cipher wrapped in Galois Counter Mode (GCM). The \texttt{page-plaintext} of \Page{} index $i$ (a big-endian 4-byte unsigned integer) are encrypted via
+\begin{itemize}
+	\item $\texttt{Entry-Cipher} = \texttt{AES-256-GCM}(\texttt{Entry-AES-key})$
+	\item $\texttt{Page-IV-HMAC} = \texttt{SHA-256-HMAC}(\texttt{Page-IV-seed})$
+	\item $\texttt{Page-IV} = \texttt{Page-IV-HMAC}(i)$
+	\item \texttt{ciphertext-HMAC = SHA-256-HMAC(ciphertext-HMAC-key)}
+	\item $\texttt{page-ciphertext} = \texttt{Entry-Cipher}(\texttt{page-plaintext}, \texttt{Page-IV})$
+	\item \texttt{page-ciphertext-MAC = ciphertextHMAC(ciphertext)}
+\end{itemize}
+
+The \Entry{} metadata is serialized to its Protobuf binary representation (\texttt{meta-plaintext })iand encrypted via \texttt{meta-ciphertext = Entry-Cipher(meta-plaintext, Meta-IV)}. 
+
+The 108 byte EEK is encrypted in the \Envelope{} using the shared ECDH secret between the author and reader keys to construct the 76 byte key encryption key (KEK):
+\begin{itemize}
+	\item \texttt{shared-secret = ScalarMultiply(author-pub, reader-priv)}
+	\item \texttt{KDF = SHA-256-HKDF(shared-secret.X)}
+	\item \texttt{KEK = KDF(80)}
+	\item \texttt{EEK-AES-key = KEK[0:31]}
+	\item \texttt{EEK-IV = KEK[32:43]}
+	\item \texttt{EEK-HMAC-key = KEK[44:75]}
+	\item \texttt{EEK-Cipher = AES-256-GCM(EEK-AES-key)}
+	\item \texttt{EEK-ciphertext = EEK-Cipher(EEK-plaintext, EEK-IV)}
+	\item \texttt{ciphertext-HMAC = SHA-256-HMAC(EEK-HMAC-key)}
+	\item \texttt{EEK-ciphertext-MAC = ciphertext-HMAC(EEK-ciphertext)}
+\end{itemize}
+
+A complete \Envelope{} contains
+\begin{itemize}
+	\item document key of entry whose EEK this envelope encrypts
+	\item author public key (\texttt{author-pub})
+	\item reader public key (\texttt{reader-pub})
+	\item EEK ciphertext (\texttt{EEK-ciphertext})
+	\item EEK ciphertext MAC (\texttt{EEK-ciphertext-MAC})
+\end{itemize}
+Every time someone (the author) wants to share a document with someone else (the reader), they create a new \Envelope{} re-encrypting the EEK using the KEK derived from the shared ECDF secret between one of their key-pairs and one of the reader. A reader must then only monitor the \Envelope{} publications for those with author or reader public keys that they know they own in order to see what \Entry{}s they can decrypt.
+
+
+
+In addition to the single \Page{} or multiple \Page{} keys, each \Entry{} also contains the Author public key, a (self-reported) creation timestamp, encrypted metadata, and the encrypted metadata MAC. Each \Page{} containst the Author public key and the \Page{}'s index in the \Entry{} in addition to the \Page{}'s encrypted contents and the MAC of that encrypted contents. 
+
+Entry metadata contains attributes like the media/MIME type of the data, compression codec, full byte size of the entire document (across all \Page{}s)
+
 
 \subsection{Identity}
 \label{sec:Identity}
@@ -104,7 +192,16 @@ Authors are responsible for uploading, downloading, and sharing documents in the
 % 	- known orgs & trust
 % 	- request signatures
 
-\subsection{Incentives}
+\subsection{Authors}
+\label{sec:Authors}
+% - author clients
+% 	- compression
+% 	- pagination
+% 	- end-to-end encryption
+% 	- mechanics of simple doc upload & share
+
+\subsection{Incentives \& Authorization}
+\label{sec:Incentives}
 % - incentives
 % 	- large orgs: access to data
 % 		- less incentive for smaller orgs and indivs: ok!
