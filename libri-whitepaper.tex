@@ -72,6 +72,25 @@ We describe Libri in detail in the rest of this paper. Section \ref{sec:related}
 % 	- scale
 % 	- maintainability
 
+Decentralized storage has existed for decades, but BitTorrent [CITE], released in the early 2000s, was one of the first very successful networks. BitTorrent makes peer-to-peer file storage efficient and contains incentives (between "seeders" and "leechers") in order to keep the network healthy. Kademlia \cite{Kademlia} is the distributed hash table (DHT) used by almost all decentralized storage system these days (including BitTorrent, which uses it for decentralized peer tracking). It provides a simple, efficient protocol for peers to use when finding and storing values among each other. 
+% TODO
+% 	- S/Kadelmia
+% 	- Coral
+IPFS [CITE] uses much of the same design as BitTorrent---peer-to-peer file sharing, possible caching of popular documents, tit-for-tat peer-to-peer incentive accounting---but it addresses the data stored by a hash of its content instead of a filename. This content-addressing combined with a simple link structure allows it to behave as a Merkle DAG, giving it great flexibility in being able to store and model many forms of data, from simple blobs to files to whole filesystems. At its heart, though, IPFS looks very much like BitTorrent: peers host data that others may optionally copy and host as well, and the addresses of the peers hosting each object are stored in a Kademlia DHT.
+
+Peer-to-peer data storage and sharing networks are powerful, but the networks themselves are unable to offer any guarantees about the data stored in them. If the only peer hosting some data goes offline, that data is lost to the network. Over the last few years, blockchain-based networks like Sia [CITE], Storj [CITE], BigchainDB [CITE], Ethereum Swarm [CITE], and Filecoin [CITE] have been developed in an attempt to solve the incentives problem: why should any peer dedicate storage space, bandwidth, and machine resources? These different networks each tackle this problem in slightly different ways, but they all rely on an economic incentive for peers to store (and keep storing) data. This economic incentive requires transactions betwen parties, and those transactions require a blockchain. 
+
+We expect most readers to be familiar with at least the high-level concepts of a blockchain. Transactions are gossiped among a network of peers, which work (together but also in competition with each other) to order and package blocks of those transactions together. Transactions and blocks are immuntable. Each block points to a previous block, forming a chain. So, if I have some data that I want to store in a decentralized network, instead of having to host it myself, I can pay another peer (or peers) to do so instead. These decentralized storage economies are still in their early periods with major technical, stability, and economic details still being worked out. 
+
+While the incentives that a blockchain allows adds an important feature to a storage network, it also saddles a network with a slow, inefficient, and complex component. [TODO: more discussion re blockchain issues].
+% TODO
+% - need to get some blockchain scaling references
+% 	- maybe read about Ripple and/or Stellar?
+% 	- does Vitalik B partitioning scheme exist yet?
+% - transaction throughput and blocktime performance
+% - code/network complexity and management
+
+
 \subsection{Health data sharing}
 % - patient portals
 % - centralized
@@ -80,11 +99,18 @@ We describe Libri in detail in the rest of this paper. Section \ref{sec:related}
 % 	- Apple Health
 % - decentralized
 % 	- MedRec, DokChain, MedicalChain, MediBloc, Coral Health, Patientory, (others?)
+Today, if patients have access to their electronic medical records (EMRs), it is most often through a health system's patient portal, where patients have authenticated access into a site showing things like lab results, appointments, and prescriptions. While these portals are indeed better than nothing, they rarely contain the more detailed EMR documents (e.g., clinical notes), and they often omit EMRs from whole groups within the system that aren't yet integrated with it. Many small-to-medium sized practices don't have any patient portal. These patient portals are also read-only: patients cannot upload their EMRs from portal A into portal B. Some portals are part of regional health information exchanges (HIEs), where some doctors can log in and see records from others, but like the portals, these HIEs have incomplete EMR and doctor coverage even within a large metropolitan regions. Some health systems are exposing RESTful APIs (often in the form of the HL7 FHIR standard) that allow \nth{3} parties like Apple Health to query and aggregate them. While these APIs are good progress, the vast majority of doctors and EMRs are not accessible via them. Like the patient portals (which may in fact use them), these APIs are also generally read only for clinical data and thus do not fully solve the problem of transfering a subset of EMRs from doctor A to doctor B.
+
+In recent years, a bevy of blockchain-based EMR storage proposals have appeared, including DokChain, MedRec, MedicalChain, MediBloc, Coral Health, Patientory [CITES NEEDED]. [FEW SENTANCES SUMMARIZING EACH AND GIVING STATUS.] While we are glad to see similar ideas taking shape across the healthcare ecosystem, most of these efforts are still very much in their infancy (and some are mere proposals), often with very little technical details available to the public. 
+
+\subsection{Libri's place}
+Libri focuses only on storing and sharing data in a decentralized manner. We believe this decentralization is necessary to include as many organizationsn in the healthcare ecosytem as possible. Higher-level needs like authentication, identity, and EMR-integrations will be built on top of Libri but most likely as conventional, centralized applications talking to the shared Libri network. Healthcare business logic is hard enough to manage when building in a centralized world; we don't see the need to complicate higher-level logic as well by prematurely decentralizing it. A decentralized storage core is sufficient.
+
 
 \section{Architecture}
 \label{sec:arch}
 % - librarian & author nomenclature
-% - librarian responsibilities
+% - librarian responsibilitiee
 % 	- storing & returning values for given key
 % 	- keeping track of (some of) other peers in the network
 % 	- gossiping publication events
