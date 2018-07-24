@@ -127,7 +127,7 @@ Libri focuses only on storing and sharing data in a decentralized manner. We bel
 Peers in the Libri network are called Librarians, and clients of these peers are called Authors. Librarians are responsible for 
 \begin{itemize}
 	\item storing/retrieving documents,
-	\item maintaing routing table of other peers in the network,
+	\item maintaining routing table of other peers in the network,
 	\item gossiping store events to other peers,
 	\item re-replicating data if it becomes under-replicated.
 \end{itemize}
@@ -143,9 +143,9 @@ Authors are clients responsible for uploading, downloading, and sharing content 
 	\item Libri network Put/Get requests.
 \end{itemize}
 
-Author clients by default compress all data with GZIP unless otherwise specified. This compressed stream is then split up into pages (or chunks) of 2MB or less. Each page is individually encrypted and uploaded (via a Put request) to Libri. When retrieving data from Libri, the author client is also responsible for the reverse process of downloading, decrypting, concatenating, and decompressing the chunks into the orignial byte stream that was uploaded.
+Author clients by default compress all data with GZIP unless otherwise specified. This compressed stream is then split up into pages (or chunks) of 2MB or less. Each page is individually encrypted and uploaded (via a Put request) to Libri. When retrieving data from Libri, the author client is also responsible for the reverse process of downloading, decrypting, concatenating, and decompressing the chunks into the original byte stream that was uploaded.
 
-Both Librarians and Authors may subscribe to the gossipped store events of other Librarians. Usually each Librarian or Author will want to receive a complete log of all events. In a blockchain-based system, there is usually a single log (i.e., the ``consensus"). In Libri, each peer maintains its own log, which with very high probability captures all store event. The individual logs of each peer have exactly the same events in them with high probability, but very small differences in ordering and timing ($<$ 1s) will exist due to gossip path differences. We believe these small differences are well worth the performance benefits and implementation simplicity of avoiding a blockchain. Organizations running fleets of nodes may post consolidated versions of these store logs for the public to download, compare, and query if they desire.
+Both Librarians and Authors may subscribe to the gossiped store events of other Librarians. Usually each Librarian or Author will want to receive a complete log of all events. In a blockchain-based system, there is usually a single log (i.e., the ``consensus"). In Libri, each peer maintains its own log, which with very high probability captures all store events. The individual logs of each peer have exactly the same events in them with high probability, but very small differences in ordering and timing ($<$ 1s) will exist due to gossip path differences. We believe these small differences are well worth the performance benefits and implementation simplicity of avoiding a blockchain. Organizations running fleets of nodes may post consolidated versions of these store logs for the public to download, compare, and query if they desire.
 
 \subsection{Librarian API}
 \label{sec:API}
@@ -171,7 +171,7 @@ Each Librarian exposes a synchronous service with the following endpoints:
 
 The \ttt{Find} and \texttt{Store} endpoints follow the standard Kademlia protocol. \texttt{Introduce} is used when a new peer is created and needs to bootstrap some initial other peers into its routing table. \texttt{Verify}, used by peers to ensure sufficient replication of the documents they contain, behaves very simiarlly to \texttt{Find} except that it returns an HMAC instead of the value. \Get{} and \Put{} are mostly intended for Authors to call (rather than other Librarians), especially since they involve the receiver of the call making a number of \texttt{Find} and/or \texttt{Store} calls. In Section \ref{sec:Incentives}, we discuss authorization and rate limits for endpoints between peers and clients.
 
-\ttt{Subscribe} allows peers to listen to the publications eminating from or relayed through other peers. Librarians will usually subscribe to the $O(10)$ other Librarians, receiving almost all of each subscribed peer's publications, meaning that each peer would receive at least one publication notification for every true publication event with very high probability. Authors not interested in the full publication log would instead subscribe to $O(10)$ Librarians with Bloom filters for specific sets of author and/or reader public keys that it is interested in.
+\ttt{Subscribe} allows peers to listen to the publications emanating from or relayed through other peers. Librarians will usually subscribe to the $O(10)$ other Librarians, receiving almost all of each subscribed peer's publications, meaning that each peer would receive at least one publication notification for every true publication event with very high probability. Authors not interested in the full publication log would instead subscribe to $O(10)$ Librarians with Bloom filters for specific sets of author and/or reader public keys that it is interested in.
 
 \subsection{Libri Documents}
 \label{sec:Docs}
