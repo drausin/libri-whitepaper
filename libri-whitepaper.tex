@@ -79,17 +79,13 @@ Decentralized storage has existed in various forms for decades, but BitTorrent \
 
 InterPlanetary File System (``IPFS") \cite{ipfs} uses much of the same design as BitTorrent---peer-to-peer file sharing, possible caching of popular documents, tit-for-tat incentive accounting---but it addresses the stored data by a hash of its content instead of a filename. This content-addressing combined with a simple link structure allows it to behave as a Merkle DAG, giving it great flexibility in being able to store and model many forms of data, from simple blobs to files to whole filesystems. At its heart, though, IPFS looks very much like BitTorrent: peers host data that others may optionally copy and host as well, and the addresses of the peers hosting each object are stored in a Kademlia DHT.
 
-Peer-to-peer data storage and sharing networks are powerful, but the networks themselves are unable to offer any guarantees about the data stored in them. If the only peer hosting a particular segment of data goes offline, that data is lost from the network. Absent sufficient incentives to operate a storage node, networks are unable to offer durability and performance guarantees required for most production-level storage needs. Over the last few years, blockchain-based networks such as Sia \cite{sia}, Storj \cite{storj}, \cite{bigchaindb,bigchaindb2}, Ethereum Swarm \cite{swarm1,swarm2}, and Filecoin \cite{filecoin} have been developed in an attempt to solve the incentives problem: why should any peer dedicate storage space, bandwidth, and machine resources? These different networks each tackle this problem in slightly different ways, but they all rely on an economic incentive for peers to store (and keep storing) data. This economic incentive requires monetary transactions between parties, and those transactions require a blockchain. 
+Peer-to-peer data storage and sharing networks are powerful, but the networks themselves are unable to offer any guarantees about the data stored in them. If the only peer hosting some data goes offline, that data is lost from the network. Absent sufficient incentives to operate a storage node, networks are unable to offer durability and performance guarantees required for most production-level storage needs. Over the last few years, blockchain-based networks such as Sia \cite{sia}, Storj \cite{storj}, \cite{bigchaindb,bigchaindb2}, Ethereum Swarm \cite{swarm1,swarm2}, and Filecoin \cite{filecoin} have been developed in an attempt to solve the incentives problem: why should any peer dedicate storage space, bandwidth, and machine resources? These different networks each tackle this problem in slightly different ways, but they all rely on an economic incentive for peers to store (and keep storing) data. This economic incentive requires monetary transactions between parties, and those transactions require a blockchain. 
 
 We expect most readers to be familiar with at least the high-level concepts of a blockchain. Transactions are gossiped among a network of peers, which work (together but also in competition with each other) to order and package blocks of those transactions together. Transactions and blocks are immutable. Each block points to a previous block, forming a chain. So, if I have some data that I want to store in a decentralized network, instead of having to host it myself, I can pay another peer (or peers) to do so instead. These decentralized storage economies are still in their early periods with major technical and economic details still being worked out.
 
-While the incentive structure that blockchain-based approaches allow adds an important feature to a storage network, it also saddles a network with a slow, inefficient, and complex component. [TODO: more discussion re blockchain issues].
-% TODO
-% - need to get some blockchain scaling references
-% 	- maybe read about Ripple and/or Stellar?
-% 	- does Vitalik B partitioning scheme exist yet?
-% - transaction throughput and blocktime performance
-% - code/network complexity and management
+While the incentives that a blockchain allows add an important feature to a storage network, they also saddle it with a slow, complex component. Ethereum has a current cap at 15 transactions per second, with a block time of about 15 seconds. These limits define the request rate and response time for any storage solution using Ethereum (e.g,. even via an ERC20 token). To anyone who has worked with commodity data stores (e.g., MySQL, PostgreSQL, DynamoDB, Cassandra) to build real-world applications, a data store capable of no more than 15 transactions per second and an eventual consistency window of up to a minute\footnote{Since it usually takes a few blocks to be sealed for a user to have confidence that their transaction is still on the longest chain, the total time for a confirmed transaction at 15 seconds/block is perhaps between 30 and 60 seconds.} represents an impractical step backwards.
+
+Blockchains and the incentive systems they support also add non-trivially to the maintenance and coordination complexity of the storage system. When new storage features and bugs fixes are designed, implemented, and deployed, developers must account for how these changes will (or will not) interact with the incentive system. These considerations slow development of the core storage capabilities. 
 
 \subsection{Health data sharing}
 % - patient portals
@@ -416,6 +412,8 @@ The next large technical hurdle is ramping up integrations with healthcare organ
 \section{Conclusion}
 The field of decentralized storage is still in its infancy, with few networks supporting true production loads. The network designs that do exist have few performance studies to give confidence that they can in fact support the production loads they aim to. Libri is intended to be simple and opinionated, which frees it from many of the challenges (e.g., consensus protocols, incentives) associated with other decentralized systems. Documents are encrypted and shared between parties through a very explicit API, and these documents are kept replicated by the network as a whole. Preliminary experimental results indicate that Libri networks exhibit very good request latency, rate, and throughput properties, giving us confidence that we can immediately begin testing a persistent cluster with production-level load. 
 
+\pagebreak
+
 \begin{appendices}
 
 \section{Document structure}
@@ -472,12 +470,14 @@ Below we describe the structure of each of the three Libri document types: \Page
 	\end{small}
 \end{table}
 
+\pagebreak
+
 \section{Entry metadata}
 \label{app:entry-meta}
 
 \ttt{EntryMetadata} contains attributes of the \Entry{} that inform decompression, decryption, and concatenation. It also optionally contains arbitrary domain-specific properties and the schema/data dictionary versions that it conforms to.
 
-\begin{table}[p]
+\begin{table}[htbp]
 	\caption*{\ttt{EntryMetadata} structure}
 	\begin{small}
 	\begin{tabular}{lll}
@@ -498,9 +498,34 @@ Below we describe the structure of each of the three Libri document types: \Page
 	\end{small}
 \end{table}
 
-TODO \ttt{SchemaArtifact}
+\ttt{SchemaArtifact} denotes the schema artifact associated with the serialized plaintext of a particular \Entry{}. Artifacts can mainly be two separate types:
+\begin{description}
+	\item [Schema] can be of any type (e.g., Protobuf, Avro, JSON, XML, XSD, etc) that minimally describe the format of the data and optionally/preferably also include the data dictionary (i.e., the semantic meaning of the schema components) as well.
+	\item [Data dictionary] is especially important when the schema is broad/loose (as is the case in some standard data formats like HL7). This additional documentation adds clarity about the semantic meaning/use of each field. For example, a schema may contain two similar fields, A1 and A2, and one entry data producer may store a value in A1, whereas another producer may store the same semantic value in A2. The schema for both messages is the same, but the schema interpretation is different.
+\end{description}
+
+New schemas should obviously be as well-defined and unambiguous as possible, but many legacy data formats require additional interpretation. Clients can choose to do what they want with the schema and data dictionary, but commonly they will have combinations of these that they know how to handle explicitly.
+
+\begin{table}[htb]
+	\caption*{\ttt{SchemaArtifact} structure}
+	\begin{small}
+	\begin{tabular}{lll}
+		\toprule
+		name & type  & description \\ \midrule
+		\ttt{group} & \ttt{string} & group owning the schema (commonly a Github user) \\
+		\ttt{project} & \ttt{string} & project in which schema resides (commonly a Github project) \\
+		\ttt{path} & \ttt{string} & path to schema file within project \\
+		\ttt{name} & \ttt{string} & (optional) name of the schema with the file \\
+		\ttt{version} & \ttt{string} & semantic version of the schema (e.g., ``0.1.0") \\
+		\bottomrule
+	\end{tabular}
+	\end{small}
+\end{table}
+
 
 \end{appendices}
+
+\pagebreak
 
 \printbibliography
 
