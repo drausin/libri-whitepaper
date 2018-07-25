@@ -41,19 +41,10 @@
 \maketitle
 
 \begin{abstract}
-We describe Libri, a decentralized storage network intended for heterogenous healthcare data. While its initial focus is healthcare, its performance, security, and sharing capabilities make it well-suited for data consortiums across a number of industries. Libri does not depend on any blockchain or distributed consensus protocol, simplifying its implementation and allowing its performance to scale very well with horizontal cluster size. Libri documents are automatically (re-)replicated across network peers to ensure robustness to planned and unplanned peer outages. The Libri API exposes simple \Put{}/\Get{} endpoints and a streaming \ttt{Subscribe} endpoint for storage notifications across the entire network. We describe initial experiments measuring request load and cluster size on request latency, rate, and throughput. In particular, a modest 64-peer cluster with 1 CPU and 6 GB RAM per peer easily handles over a million documents uploaded per day with median \Get{} and \Put{} latencies of 6 ms and 22 ms, respectively. Request latency and throughput scale well with horizontal cluster size increasing from 8 to 64 peers. These initial results give us confidence that Libri can scale to efficiently handle production-level load across many common enterprise use-cases, such as health data sharing for large US provider organizations.
+We describe Libri, a decentralized storage network suitable for heterogenous healthcare data. While its initial focus is healthcare, its performance, security, and sharing capabilities make it well-suited for data consortiums across a number of industries. Libri does not depend on any blockchain or distributed consensus protocol, simplifying its implementation and allowing its performance to scale very well with horizontal cluster size. Libri documents are automatically (re-)replicated across network peers to ensure robustness to planned and unplanned peer outages. The Libri API exposes simple \Put{}/\Get{} endpoints and a streaming \ttt{Subscribe} endpoint for storage notifications across the entire network. We describe initial experiments measuring request load and cluster size on request latency, rate, and throughput. In particular, a modest 64-peer cluster with 1 CPU and 6 GB RAM per peer easily handles over a million documents uploaded per day with median \Get{} and \Put{} latencies of 6 ms and 22 ms, respectively. Request latency and throughput scale well with horizontal cluster size increasing from 8 to 64 peers. These initial results give us confidence that Libri can scale to efficiently handle production-level load across many industries, beginning with healthcare.
 \end{abstract}
 
 \section{Introduction}
-% - problems w/ health data
-% 	- existing orgs
-% 	- why so hard to share
-% 	- security
-% - Libri solution
-% 	- neutral, durable storage for any health data
-% 	- problems it does not try to solve (right now)
-% - other medical-data related projects
-
 Organizations across all domains are becoming more adapt at creating, collecting, and processing data relevant to their operations in search of valuable insights. Increasingly, these enterprises are looking to pool their data to enhance its analytical value, solve collective action problems, and provide more comprehensive understandings of system-wide events. These nascent data consortiums are emerging among financial institutions (for instance, in support of anti-money laundering activities), educational institutions, and the healthcare sector.
 
 Participation in these coordinated data repositories benefits all related organizations through simplified, standardized access to data for improved operations and richer analytics. The comprehensive data reach of these collaborations also benefit consumers, who can now track and control their data movement across sectors fragmented by many private and public institutions.
@@ -68,13 +59,6 @@ We describe Libri\footnote{\url{https://github.com/drausin/libri}} in detail in 
 \label{sec:related}
 
 \subsection{Decentralized storage}
-% - decentralized storage landscape
-% 	- non-blockchain (Kademlia, BitTorrent, IPFS)
-% 	- blockchain (Sia, Storj, BigchainDB, Ethereum Swarm, Filecoin)
-% - challenges of blockchain
-% 	- scale
-% 	- maintainability
-
 Decentralized storage has existed in various forms for decades, but BitTorrent \cite{bittorrent-protocol,bittorrent-review}, released in the early 2000s, was one of the first networks to gain widespread participation. BitTorrent makes peer-to-peer file storage efficient and contains incentives (between ``seeders" and ``leechers") in order to keep the network healthy. Kademlia \cite{kademlia} is the distributed hash table (DHT) used by almost all contemporary decentralized storage system (including BitTorrent, which now uses it for decentralized peer tracking). Kademlia provides a simple, efficient protocol for peers to use when finding and storing values within the network.
 
 InterPlanetary File System (``IPFS") \cite{ipfs} uses much of the same design as BitTorrent---peer-to-peer file sharing, possible caching of popular documents, tit-for-tat incentive accounting---but it addresses the stored data by a hash of its content instead of a filename. This content-addressing combined with a simple link structure allows it to behave as a Merkle DAG, giving it great flexibility in being able to store and model many forms of data, from simple blobs to files to whole filesystems. At its heart, though, IPFS looks very much like BitTorrent: peers host data that others may optionally copy and host as well, and the addresses of the peers hosting each object are stored in a Kademlia DHT.
@@ -83,21 +67,14 @@ Peer-to-peer data storage and sharing networks are powerful, but the networks th
 
 We expect most readers to be familiar with at least the high-level concepts of a blockchain. Transactions are gossiped among a network of peers, which work (together but also in competition with each other) to order and package blocks of those transactions together. Transactions and blocks are immutable. Each block points to a previous block, forming a chain. So, if I have some data that I want to store in a decentralized network, instead of having to host it myself, I can pay another peer (or peers) to do so instead. These decentralized storage economies are still in their early periods with major technical and economic details still being worked out.
 
-While the incentives that a blockchain allows add an important feature to a storage network, they also saddle it with a slow, complex component. Ethereum has a current cap at 15 transactions per second, with a block time of about 15 seconds. These limits define the request rate and response time for any storage solution using Ethereum (e.g,. even via an ERC20 token). To anyone who has worked with commodity data stores (e.g., MySQL, PostgreSQL, DynamoDB, Cassandra) to build real-world applications, a data store capable of no more than 15 transactions per second and an eventual consistency window of up to a minute\footnote{Since it usually takes a few blocks to be sealed for a user to have confidence that their transaction is still on the longest chain, the total time for a confirmed transaction at 15 seconds/block is perhaps between 30 and 60 seconds.} represents an impractical step backwards.
+While the incentives that a blockchain allows add an important feature to a storage network, they also saddle it with a slow, complex component. Ethereum has a current cap at 15 transactions per second, with a block time of about 15 seconds. These limits define the request rate and response time for any storage solution using Ethereum (e.g,. even via an ERC20 token). To anyone who has worked with commodity data stores (e.g., MySQL, PostgreSQL, DynamoDB, Cassandra) to build real-world applications, a data store capable of no more than 15 transactions per second and an eventual consistency window of up to a minute\footnote{Since it usually takes a few blocks to be sealed for a user to have confidence that their transaction is still on the longest chain, the total time for a confirmed transaction at 15 seconds/block is perhaps between 30 and 60 seconds.} represents an impractical step backward.
 
 Blockchains and the incentive systems they support also add non-trivially to the maintenance and coordination complexity of the storage system. When new storage features and bugs fixes are designed, implemented, and deployed, developers must account for how these changes will (or will not) interact with the incentive system. These considerations slow development of the core storage capabilities. 
 
 \subsection{Health data sharing}
-% - patient portals
-% - centralized
-% 	- HIEs
-% 	- Picnic Health
-% 	- Apple Health
-% - decentralized
-% 	- MedRec, DokChain, MedicalChain, MediBloc, Coral Health, Patientory, (others?)
 Today, if patients have any access to their electronic medical records (EMRs), it is most often through a health system's patient portal, where patients authenticate into a site showing things like lab results, appointments, and prescriptions. While these portals are indeed better than nothing, they rarely contain the more detailed EMR documents (e.g., clinical notes), and they often omit EMRs from whole groups within the system that aren't yet integrated with it. Many small-to-medium sized practices don't have any patient portal. These patient portals are also read-only: patients cannot upload their EMRs from portal A into portal B. Some portals are part of regional health information exchanges (HIEs), where some doctors can log in and see records from others, but like the portals, these HIEs have incomplete EMR and doctor coverage even within a large metropolitan regions. Some health systems are exposing RESTful APIs (often in the form of the HL7 FHIR standard) that allow \nth{3} parties like Apple Health to query and aggregate them. While these APIs are good progress, the vast majority of doctors and EMRs are not accessible via them. Like the patient portals (which may in fact use them), these APIs are also generally read only for clinical data and thus do not fully solve the problem of transfering a subset of EMRs from doctor A to doctor B.
 
-In recent years, a bevy of blockchain-based EMR storage proposals have appeared, including DokChain, MedRec, MedicalChain, MediBloc, Coral Health, Patientory, and GemOS [CITES NEEDED]. [FEW SENTANCES SUMMARIZING EACH AND GIVING STATUS.] While we are glad to see similar ideas taking shape across the healthcare ecosystem, most of these efforts are still very much in their infancy (and some are mere proposals), often with very few technical details available to the public. 
+In recent years, a bevy of blockchain-based EMR storage proposals have appeared, including DokChain \cite{dokchain}, Coral Health \cite{coralhealth}, MedicalChain \cite{medicalchain}, MediBloc \cite{medibloc}, MedRec \cite{medrec}, and Patientory \cite{patientory}. Many use ERC20 tokens \cite{coralhealth,medibloc}, direct Ethereum smart contracts \cite{medrec,patientory}, or a private Hyperledger blockchain \cite{dokchain,medicalchain}. Those papers \cite{dokchain,coralhealth,medibloc} that discuss storage in any concrete terms mention only in passing using IPFS without any regard for the durability or performance challenges we discuss in the previous section. While we are glad to see similar ideas taking shape across the healthcare ecosystem, most of these efforts are still very much in their infancy (and some are mere proposals), often with very few technical details available to the public. 
 
 \subsection{Libri's place}
 Libri focuses only on storing and sharing data in a decentralized manner. We believe this decentralization is necessary to include as many organizations in the healthcare ecosytem as possible. Higher-level needs like authentication, identity, and EMR-integrations will be built on top of Libri but most likely as conventional, centralized applications communicating with the shared Libri network. Healthcare business logic is hard enough to manage when building in a centralized world; we don't see the need to complicate higher-level logic as well by prematurely decentralizing it. A decentralized storage core is sufficient.
@@ -105,21 +82,6 @@ Libri focuses only on storing and sharing data in a decentralized manner. We bel
 
 \section{Architecture}
 \label{sec:arch}
-% - librarian & author nomenclature
-% - librarian responsibilitiee
-% 	- storing & returning values for given key
-% 	- keeping track of (some of) other peers in the network
-% 	- gossiping publication events
-% 	- re-replicating data if it becomes under-replicated
-% - author responsibilities
-% 	- uploading, downloading, & sharing documents to/from Libri
-% 		- compression
-% 		- pagination
-% 		- end-to-end encryption
-% - no blockchain
-% 	- instead of single, immutable log of all storage events, each node has its own log
-% 	- if you want history, from before your node, consult published logs of other nodes
-
 Peers in the Libri network are called Librarians, and clients of these peers are called Authors. Librarians are responsible for 
 \begin{itemize}
 	\item storing/retrieving documents,
@@ -145,15 +107,6 @@ Both Librarians and Authors may subscribe to the gossiped store events of other 
 
 \subsection{Librarian API}
 \label{sec:API}
-% - storage: same Kademlia framework as others
-% - API
-%	- keys hashes of serialized docs
-% 	- documents
-% 		- immutability
-% 		- entries, pages, & envelopes
-% 		- E2E enc baked into API
-% - librarians peers
-% 	- mechanics of a simple Put & Get
 Each Librarian exposes a synchronous service with the following endpoints:
 \begin{itemize}
 	\item \ttt{Introduce} receives a peer ID and IP address and returns a random sample of other peers from the routing table.
@@ -253,12 +206,6 @@ When Librarians receive requests, they first verify the peer public key signatur
 
 \subsection{Authors}
 \label{sec:Authors}
-% - author clients
-% 	- compression
-% 	- pagination
-% 	- end-to-end encryption
-% 	- mechanics of simple doc upload & share
-
 Authors are the clients of the Libri network: they write and read documents. To convert binary content into the documents to be written to the network, authors follow a basic process of compression, pagination, and encryption. 
 
 Compression is optional but recommended, since its performance cost is usually low and can result in much smaller files that need to be uploaded and stored. The compression codec used is included in the \Entry{} metadata. The compressed content is then split up---paginated---into chunks of at most 2 MB. Each of these chunks is then individually encrypted using the EEK, which is generated randomly for each content. The EEK is encrypted by the KEK generated from the shared author-reader ECDH secret and is used to create the \Envelope{}. When small content requires only a single \Page{}, that \Page{} is stored within the \Entry{} for the content. The Author then \ttt{Put}s the \Envelope{} and \Entry{} into the network via calls to one or more Librarians, which store each document with the appropriate other Librarians close to its key in the Kademlia hash ring. 
@@ -289,9 +236,6 @@ If one of the peers that once stored the value no longer has it or is unavailabl
 Librarians currently wait 1 second between verifications, meaning that if a Librarian is storing $n$ documents, it is verifying the replication of each document on a period of roughly $n$ seconds. Assuming a replication factor of $k$, the network as a whole is thus verifiying each document on average $k/n$ seconds. It is hard to know exactly what the "right" verification period should be. We expect to monitor how quickly the network is able to ``heal" itself after losing peers and update the replication period accordingly.
 
 \subsection{Protecting against malicious actors}
-% - protecting against malicious activity
-% 	- DDOS, spam, Sybil
-
 As with any decentralized system where one does not necessarily have identity and/or reputation information for every peer, Libri is designed to be resilient to many different types of malicious actors. Below we discuss some of the most common forms of attack and Libri's defense against them. 
 
 \subsubsection{DDOS}
@@ -336,12 +280,6 @@ Smaller organizations and almost all consumers will not want to run their own pe
 
 \section{Experiments}
 \label{sec:exps}
-% - cluster performance over size & load
-% 	- {8, 16, 32, 64}-node cluster @ {64K, 256K, 1024K} UPD
-% - specific scenarios
-% 	- peer drop-out triggering re-replication             
-% 	- malicious Getters & Putters
-
 Decentralized storage systems like IPFS, Sia, and Storj have existed for at least a few years, but we have found very few empirical examinations of their performance. We believe that part of the evaluation for storage systems like these should include how efficiently they are able to handle the routine operations required of them. Below we describe some preliminary experiments on ephemeral Libri clusters. All the configuration and results for the experiments in their paper are publicly available\footnote{\url{https://github.com/drausin/libri-experiments/tree/develop/experiments/exp03}}.
 
 \subsection{Performance across cluster size and load}
@@ -412,8 +350,6 @@ The next large technical hurdle is ramping up integrations with healthcare organ
 \section{Conclusion}
 The field of decentralized storage is still in its infancy, with few networks supporting true production loads. The network designs that do exist have few performance studies to give confidence that they can in fact support the production loads they aim to. Libri is intended to be simple and opinionated, which frees it from many of the challenges (e.g., consensus protocols, incentives) associated with other decentralized systems. Documents are encrypted and shared between parties through a very explicit API, and these documents are kept replicated by the network as a whole. Preliminary experimental results indicate that Libri networks exhibit very good request latency, rate, and throughput properties, giving us confidence that we can immediately begin testing a persistent cluster with production-level load. 
 
-\pagebreak
-
 \begin{appendices}
 
 \section{Document structure}
@@ -469,8 +405,6 @@ Below we describe the structure of each of the three Libri document types: \Page
 	\end{tabular}
 	\end{small}
 \end{table}
-
-\pagebreak
 
 \section{Entry metadata}
 \label{app:entry-meta}
