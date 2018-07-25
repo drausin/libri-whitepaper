@@ -71,6 +71,14 @@ While the incentives that a blockchain allows add an important feature to a stor
 
 Blockchains and the incentive systems they support also add non-trivially to the maintenance and coordination complexity of the storage system. When new storage features and bugs fixes are designed, implemented, and deployed, developers must account for how these changes will (or will not) interact with the incentive system. These considerations slow development of the core storage capabilities. 
 
+While financial transactions do justify this complexity, many different domains do not necessarily. In the particular domain of health data storage, we make the following assumptions:
+\begin{itemize}
+	\item the community of organization running peers is gated (often for regulatory compliance);
+	\item organizations run peers in low-variance cloud infrastructure;
+	\item the benefits of read/write access to the shared data repository outweigh the costs of running the peers.
+\end{itemize}
+We believe these assumptions are reasonable and hold across many domains, not just health data storage. Coupling these assumptions with a narrow, storage-only (i.e., no processing) feature set allows us to avoid the complexity of a blockchain.
+
 \subsection{Health data sharing}
 Today, if patients have any access to their electronic medical records (EMRs), it is most often through a health system's patient portal, where patients authenticate into a site showing things like lab results, appointments, and prescriptions. While these portals are indeed better than nothing, they rarely contain the more detailed EMR documents (e.g., clinical notes), and they often omit EMRs from whole groups within the system that aren't yet integrated with it. Many small-to-medium sized practices don't have any patient portal. These patient portals are also read-only: patients cannot upload their EMRs from portal A into portal B. Some portals are part of regional health information exchanges (HIEs), where some doctors can log in and see records from others, but like the portals, these HIEs have incomplete EMR and doctor coverage even within a large metropolitan regions. Some health systems are exposing RESTful APIs (often in the form of the HL7 FHIR standard) that allow \nth{3} parties like Apple Health to query and aggregate them. While these APIs are good progress, the vast majority of doctors and EMRs are not accessible via them. Like the patient portals (which may in fact use them), these APIs are also generally read only for clinical data and thus do not fully solve the problem of transfering a subset of EMRs from doctor A to doctor B.
 
