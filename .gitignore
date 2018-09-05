@@ -1,7 +1,7 @@
 *.log
 *.out
 *.aux
-*.pdf
+libri-whitepaper.pdf
 *.fdb_latexmk
 *.fls
 *.synctex.gz
