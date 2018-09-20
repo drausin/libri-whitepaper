@@ -37,7 +37,7 @@
 \begin{document}
 
 \title{Libri: opinionated, high-performance decentralized storage suitable for health data \\ \vspace{5mm} \Large [DRAFT]}
-\author{Drausin Wulsin}
+\author{Drausin Wulsin and Jamie Campbell \thanks{\ttt{\{drausin,jamie\}@elixirhealth.io}}}
 \maketitle
 
 \begin{abstract}
@@ -135,13 +135,21 @@ The \ttt{Find} and \texttt{Store} endpoints follow the standard Kademlia protoco
 % 	- page
 % 	- envelope
 % - publications
+
 Libri documents take one of three forms:
 \begin{itemize}
 	\item A \Page{} holds a particular sequential chunk of the (compressed) document content. 
 	\item An \Entry{} holds the encrypted contents of the document, either as a single \Page{}, or as a list of keys to separate \Page{} documents.
 	\item An \Envelope{} contains the entry encryption key (EEK) between a specific author and reader.
 \end{itemize}
-Documents are serialized to a binary representation for storage in Libri. The key of any document is the SHA-256 hash of its value bytes. Below we discuss some particulars of each document type.
+Documents are serialized to a binary representation for storage in Libri. The key of any document is the SHA-256 hash of its value bytes. Figure \ref{fig:documents} shows an overview of these three documents. Below we discuss some particulars of each document type. 
+
+\begin{figure}[tp]
+	\centering
+	\includegraphics[width=\textwidth]{figs/document-diagram-v2.pdf}
+	\caption{Libri documents take one of three forms: \Page{}, \Entry{}, or \Envelope{}. The contents are split into one or more \Page{}s and encrypted with an AES-256 Entry Encryption Key (EEK). The IDs of each of these pages are stored in an \Entry{} along with encrypted metadata. The EEK is encrypted with a ECDH Key Encryption Key (KEK) and stored with the \Entry{} ID in an \Envelope{}. Multiple \Envelope{}s are usually generated for a single \Entry{} since one often wants to share an \Entry{} with multiple recipients.}
+	\label{fig:documents}
+\end{figure}
 
 \subsubsection{Page}
 A \Page{} contains some or all of the content for a single document. The maximum \Page {} content size is 2 MB\footnote{This maximum page size conveys our assumption that large clinical records are split up into small, granular documents. For example, a patient's clinical history with a doctor might be split up into individual records for each encounter.}, from our assumption that at least 50\% of documents will have sizes less than 2 MB. For now, our pagination strategy is very simple: we just split the (compressed) plaintext of the content into consecutive 2 MB chunks. We expect that this straightforward approach, combined with a reasonable replication strategy (e.g., 3-5x) will be sufficient to ensure clients always have access to the requisite chunks required to reconstruct their document. If this assumption proves problematic, we can always implement more sophisticated chunking via erasure coding in the clients. The Libri server code is agnostic to the chunking strategy.
