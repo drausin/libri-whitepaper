@@ -36,7 +36,7 @@
 
 \begin{document}
 
-\title{Libri: opinionated, high-performance decentralized storage suitable for health data \\ \vspace{5mm} \Large [DRAFT]}
+\title{Libri: opinionated, high-performance decentralized storage suitable for health data}
 \author{Drausin Wulsin and Jamie Campbell \thanks{\ttt{\{drausin,jamie\}@elixirhealth.io}}}
 \maketitle
 
@@ -138,6 +138,14 @@ The \ttt{Find} and \texttt{Store} endpoints follow the standard Kademlia protoco
 % 	- envelope
 % - publications
 
+\begin{figure}[tp]
+	\centering
+	\includegraphics[width=\textwidth]{figs/document-diagram-v2.pdf}
+	\caption{Libri documents take one of three forms: \Page{}, \Entry{}, or \Envelope{}. The contents are split into one or more \Page{}s and encrypted with an AES-256 Entry Encryption Key (EEK). The IDs of each of these pages are stored in an \Entry{} along with encrypted metadata. The EEK is encrypted with a ECDH Key Encryption Key (KEK) and stored with the \Entry{} ID in an \Envelope{}. Multiple \Envelope{}s are usually generated for a single \Entry{} since one often wants to share an \Entry{} with multiple recipients.}
+	\label{fig:documents}
+\end{figure}
+
+
 Libri documents take one of three forms:
 \begin{itemize}
 	\item A \Page{} holds a particular sequential chunk of the (compressed) document content. 
@@ -145,13 +153,6 @@ Libri documents take one of three forms:
 	\item An \Envelope{} contains the entry encryption key (EEK) between a specific author and reader.
 \end{itemize}
 Documents are serialized to a binary representation for storage in Libri. The key of any document is the SHA-256 hash of its value bytes. Figure \ref{fig:documents} shows an overview of these three documents. Below we discuss some particulars of each document type. 
-
-\begin{figure}[tp]
-	\centering
-	\includegraphics[width=\textwidth]{figs/document-diagram-v2.pdf}
-	\caption{Libri documents take one of three forms: \Page{}, \Entry{}, or \Envelope{}. The contents are split into one or more \Page{}s and encrypted with an AES-256 Entry Encryption Key (EEK). The IDs of each of these pages are stored in an \Entry{} along with encrypted metadata. The EEK is encrypted with a ECDH Key Encryption Key (KEK) and stored with the \Entry{} ID in an \Envelope{}. Multiple \Envelope{}s are usually generated for a single \Entry{} since one often wants to share an \Entry{} with multiple recipients.}
-	\label{fig:documents}
-\end{figure}
 
 \subsubsection{Page}
 A \Page{} contains some or all of the content for a single document. The maximum \Page {} content size is 2 MB\footnote{This maximum page size conveys our assumption that large clinical records are split up into small, granular documents. For example, a patient's clinical history with a doctor might be split up into individual records for each encounter.}, from our assumption that at least 50\% of documents will have sizes less than 2 MB. For now, our pagination strategy is very simple: we just split the (compressed) plaintext of the content into consecutive 2 MB chunks. We expect that this straightforward approach, combined with a reasonable replication strategy (e.g., 3-5x) will be sufficient to ensure clients always have access to the requisite chunks required to reconstruct their document. If this assumption proves problematic, we can always implement more sophisticated chunking via erasure coding in the clients. The Libri server code is agnostic to the chunking strategy.
@@ -198,13 +199,6 @@ A complete \Envelope{} contains
 Since usually an author wants to be able to later read a document they create, they first send an \Envelope{} to themselves, using another one of their public keys as the reader public key. This self-share allows clients to avoid locally storing the EEK plaintext, since they can always decrypt their self-shared \Envelope{} if/when they want to share the \Entry{} with someone else.
 
 When they do want to share a document, they create a new \Envelope{} re-encrypting the EEK using the KEK derived from the shared ECDH secret between one of their author key-pairs and one of the reader. One must then only monitor the \Envelope{} publications for those with author or reader public keys that they know they own in order to see what \Entry{}s they can decrypt.
-
-\begin{figure}[thp]
-	\centering
-	\includegraphics[width=\textwidth]{figs/document-diagram-v2.pdf}
-	\caption{Diagram of essential document components and relationships.}
-	\label{fig:documents}
-\end{figure}
 
 \subsubsection{Publication}
 
@@ -294,19 +288,21 @@ Librarians use RocksDB for local storage. RocksDB is an embedded key-value store
 
 
 \subsection{Hypothetical organization's setup}
-% TODO diagram ??
+
+\begin{figure}[tp]
+	\centering
+	\includegraphics[width=\textwidth]{figs/org-diagram-v1.pdf}
+	\caption{A hypothetical set of Libri users. Larger organizations like health sytems, payers, and health tech companies run their own Librarian nodes. Consumer-facing tools, analytics, and other third party applications use a Libri proxy service maintained by a tech company.}
+	\label{fig:org-setup}
+\end{figure}
+
 An organization runs peers to get read/write access to the DHT as well as the stream of all publication events. A modest integration might look like the following.
 
 The organization runs 8 peers that bootstrap from long-lived peers and introduce themselves to the rest of the Libri network. They may also have an internal service that uses the Author client library to proxy Put and Get requests to Libri via their 8 Librarian peers. This service may also send publication notifications on to an internal message bus (like Kafka) or filter them down to only those involving that organization (via their set of public keys). If they see that someone just shared a document with one of their public keys, they could then use Author client library download, decrypt, decompress, and concatenate the relevant Pages before storing in their own internal data system (which presumably uses its own encryption at rest and in transit).
 
 Smaller organizations and almost all consumers will not want to run their own peers. We expect an ecosystem of \nth{3}-party companies to build consumer-facing apps and APIs that will proxy access to the data in Libri much like companies like Coinbase proxy a consumer's access to the underlying Bitcoin network.
 
-\begin{figure}[h]
-	\centering
-	\includegraphics[width=\textwidth]{figs/org-diagram-v1.pdf}
-	\label{fig:documents}
-\end{figure}
-
+Figure \ref{fig:org-setup} shows a schematic of such a setup.
 \section{Experiments}
 \label{sec:exps}
 Decentralized storage systems like IPFS, Sia, and Storj have existed for at least a few years, but we have found very few empirical examinations of their performance. We believe that part of the evaluation for storage systems like these should include how efficiently they are able to handle the routine operations required of them. Below we describe some preliminary experiments on ephemeral Libri clusters. All the configuration and results for the experiments in their paper are publicly available\footnote{\url{https://github.com/drausin/libri-experiments/tree/develop/experiments/exp03}}.
