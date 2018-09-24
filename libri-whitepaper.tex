@@ -87,14 +87,16 @@ Libri focuses only on storing and sharing data in a decentralized manner. We bel
 
 \section{Architecture}
 \label{sec:arch}
-Peers in the Libri network are called Librarians, and clients of these peers are called Authors. Librarians are responsible for the following:
+Peers in the Libri network are called Librarians, and clients of these peers are called Authors. Librarian peers never see the plaintext content of a document and deal only with encrypted chunks of one. Author clients convert a plaintext document into these encrypted chunks and back again. This distinction means that data stored in Libri and all data encountered by Librarian peers is fully end-to-end encrypted.
+
+Librarians are responsible for the following:
 \begin{itemize}
 	\item storing/retrieving documents,
 	\item maintaining routing tables of other peers in the network,
 	\item gossiping storage events to other peers,
 	\item re-replicating data if it becomes under-replicated.
 \end{itemize}
-The storing/retrieving and routing table behave quite similarly to a standard Kademlia \cite{kademlia} distributed hash table (DHT). The storage event gossiping and re-replication responsibilities add two important capabilities on top of it. Section \ref{sec:API} below describes the Librarian API in more detail.
+The storing/retrieving and routing table behave quite similarly to a standard Kademlia \cite{kademlia} distributed hash table (DHT). The storage event gossiping and re-replication responsibilities add two important capabilities on top of it. Section \ref{sec:API} below describes the Librarian API in more detail. Each Librarian exposes the same synchronous API for other Librarians and Author clients to make requests against.
 
 Each Librarian and Author has an identity defined by the 256-bit public key of an secp256k1 ECDSA key-pair. Librarians and Authors sign each request with their private key (see Section \ref{sec:Identity} below for more details), and each Librarian's public key also defines its location on the Kademlia hash ring. Using a public key for peer identity and request signing closely follows the approach in S/Kademlia \cite{skademlia}, though the node ID is just the public key rather than a hash of it as in S/Kademlia. 
 
@@ -106,7 +108,7 @@ Authors are clients responsible for uploading, downloading, and sharing content 
 	\item Libri network Put/Get requests.
 \end{itemize}
 
-Author clients by default compress all data with GZIP unless otherwise specified. This compressed stream is then split up into Pages (or chunks) of 2 MB or less. Each Page is individually encrypted and uploaded (via a \Put{} request) to Libri. When retrieving data from Libri, the Author client is also responsible for the reverse process of downloading, decrypting, concatenating, and decompressing the chunks into the original byte stream that was uploaded.
+Author clients by default compress all data with GZIP unless otherwise specified. This compressed stream is then split up into Pages (or chunks) of 2 MB or less. Each Page is individually encrypted and uploaded (via a \Put{} request) to Libri. When retrieving data from Libri, the Author client is also responsible for the reverse process of downloading, decrypting, concatenating, and decompressing the chunks into the original byte stream that was uploaded. Currently, the Author client is implemented as a librarian/SDK, akin to other client-side storage libraries for services like AWS S3.
 
 Both Librarians and Authors may subscribe to the gossiped storage events of other Librarians. Usually each Librarian or Author will want to receive a complete log of all events. In a blockchain-based system, there is usually a single log (i.e., the ``consensus"). In Libri, each peer maintains its own log, which with very high probability captures all storage events. The individual logs of each peer have exactly the same events in them with high probability, but very small differences in ordering and timing ($<$ 1s) will exist due to gossip path differences. We believe these small differences are well worth the performance benefits and implementation simplicity of avoiding a blockchain or consensus protocol. Organizations running fleets of nodes may post consolidated versions of these store logs for the public to download, compare, and query if they desire.
 
@@ -235,6 +237,8 @@ Downloading a document follows a similar pattern in reverse. The Author client f
 When one author wants to share a document with another (which we designate the reader), they only need to create a new \Envelope{}, since the reader just needs to receive the (encrypted) EEK rather than the whole document re-encrypted. The author gets one of the reader's public keys \footnote{The author gets one of the reader's public keys either directly via email or QR code or indirectly via a 3rd party that the Reader has registered some of its public keys with} and samples one of its own key-pairs to construct the KEK. The author then encrypts the EEK with the new KEK and includes its public key, the reader's public key, the key of the \Entry{} it is sharing, and the EEK ciphertext in the newly constructed \Envelope{}. 
 
 Each client maintains two sets of key-pairs: author keys and reader keys. Technically, each client could just have a single key-pair they use to send and receive documents. But if every entity using Libri only had a single key-pair identifying them, one could potentially re-identify patients based on their (data-sharing) relationships with doctors. Similar re-identification attacks have been shown to be successful on ``anonymized" credit card transactions. Since even the knowledge that a patient visits a particular doctor is protected health information (PHI), clients must have more than one key-pair. For a further layer of anonymity, the keys clients use to send documents (the author keys) are distinct from those they use to receive them (the reader keys). This distinction means that knowing one of they keys a doctor uses to receive documents a patient might share with them does not let the patient see even a subset of the documents that doctor is sharing with other patients. In our initial Author client implementation, each Author has 64 author key-pairs and 64 reader key-pairs. Each key-pair is individually encrypted via scrypt \cite{scrypt} using a master password.
+
+\section{Considerations}
 
 \subsection{Incentives \& Authorization}
 \label{sec:Incentives}
