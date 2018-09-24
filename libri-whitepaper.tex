@@ -36,7 +36,7 @@
 
 \begin{document}
 
-\title{Libri: opinionated, high-performance decentralized storage suitable for health data \\ \vspace{5mm} \Large [DRAFT]}
+\title{Libri: opinionated, high-performance decentralized storage suitable for health data}
 \author{Drausin Wulsin and Jamie Campbell \thanks{\ttt{\{drausin,jamie\}@elixirhealth.io}}}
 \maketitle
 
@@ -87,14 +87,16 @@ Libri focuses only on storing and sharing data in a decentralized manner. We bel
 
 \section{Architecture}
 \label{sec:arch}
-Peers in the Libri network are called Librarians, and clients of these peers are called Authors. Librarians are responsible for the following:
+Peers in the Libri network are called Librarians, and clients of these peers are called Authors. Librarian peers never see the plaintext content of a document and deal only with encrypted chunks of one. Author clients convert a plaintext document into these encrypted chunks and back again. This distinction means that data stored in Libri and all data encountered by Librarian peers is fully end-to-end encrypted.
+
+Librarians are responsible for the following:
 \begin{itemize}
 	\item storing/retrieving documents,
 	\item maintaining routing tables of other peers in the network,
 	\item gossiping storage events to other peers,
 	\item re-replicating data if it becomes under-replicated.
 \end{itemize}
-The storing/retrieving and routing table behave quite similarly to a standard Kademlia \cite{kademlia} distributed hash table (DHT). The storage event gossiping and re-replication responsibilities add two important capabilities on top of it. Section \ref{sec:API} below describes the Librarian API in more detail.
+The storing/retrieving and routing table behave quite similarly to a standard Kademlia \cite{kademlia} distributed hash table (DHT). The storage event gossiping and re-replication responsibilities add two important capabilities on top of it. Section \ref{sec:API} below describes the Librarian API in more detail. Each Librarian exposes the same synchronous API for other Librarians and Author clients to make requests against.
 
 Each Librarian and Author has an identity defined by the 256-bit public key of an secp256k1 ECDSA key-pair. Librarians and Authors sign each request with their private key (see Section \ref{sec:Identity} below for more details), and each Librarian's public key also defines its location on the Kademlia hash ring. Using a public key for peer identity and request signing closely follows the approach in S/Kademlia \cite{skademlia}, though the node ID is just the public key rather than a hash of it as in S/Kademlia. 
 
@@ -106,7 +108,7 @@ Authors are clients responsible for uploading, downloading, and sharing content 
 	\item Libri network Put/Get requests.
 \end{itemize}
 
-Author clients by default compress all data with GZIP unless otherwise specified. This compressed stream is then split up into Pages (or chunks) of 2 MB or less. Each Page is individually encrypted and uploaded (via a \Put{} request) to Libri. When retrieving data from Libri, the Author client is also responsible for the reverse process of downloading, decrypting, concatenating, and decompressing the chunks into the original byte stream that was uploaded.
+Author clients by default compress all data with GZIP unless otherwise specified. This compressed stream is then split up into Pages (or chunks) of 2 MB or less. Each Page is individually encrypted and uploaded (via a \Put{} request) to Libri. When retrieving data from Libri, the Author client is also responsible for the reverse process of downloading, decrypting, concatenating, and decompressing the chunks into the original byte stream that was uploaded. Currently, the Author client is implemented as a librarian/SDK, akin to other client-side storage libraries for services like AWS S3.
 
 Both Librarians and Authors may subscribe to the gossiped storage events of other Librarians. Usually each Librarian or Author will want to receive a complete log of all events. In a blockchain-based system, there is usually a single log (i.e., the ``consensus"). In Libri, each peer maintains its own log, which with very high probability captures all storage events. The individual logs of each peer have exactly the same events in them with high probability, but very small differences in ordering and timing ($<$ 1s) will exist due to gossip path differences. We believe these small differences are well worth the performance benefits and implementation simplicity of avoiding a blockchain or consensus protocol. Organizations running fleets of nodes may post consolidated versions of these store logs for the public to download, compare, and query if they desire.
 
@@ -136,6 +138,14 @@ The \ttt{Find} and \texttt{Store} endpoints follow the standard Kademlia protoco
 % 	- envelope
 % - publications
 
+\begin{figure}[tp]
+	\centering
+	\includegraphics[width=\textwidth]{figs/document-diagram-v2.pdf}
+	\caption{Libri documents take one of three forms: \Page{}, \Entry{}, or \Envelope{}. The contents are split into one or more \Page{}s and encrypted with an AES-256 Entry Encryption Key (EEK). The IDs of each of these pages are stored in an \Entry{} along with encrypted metadata. The EEK is encrypted with a ECDH Key Encryption Key (KEK) and stored with the \Entry{} ID in an \Envelope{}. Multiple \Envelope{}s are usually generated for a single \Entry{} since one often wants to share an \Entry{} with multiple recipients.}
+	\label{fig:documents}
+\end{figure}
+
+
 Libri documents take one of three forms:
 \begin{itemize}
 	\item A \Page{} holds a particular sequential chunk of the (compressed) document content. 
@@ -143,13 +153,6 @@ Libri documents take one of three forms:
 	\item An \Envelope{} contains the entry encryption key (EEK) between a specific author and reader.
 \end{itemize}
 Documents are serialized to a binary representation for storage in Libri. The key of any document is the SHA-256 hash of its value bytes. Figure \ref{fig:documents} shows an overview of these three documents. Below we discuss some particulars of each document type. 
-
-\begin{figure}[tp]
-	\centering
-	\includegraphics[width=\textwidth]{figs/document-diagram-v2.pdf}
-	\caption{Libri documents take one of three forms: \Page{}, \Entry{}, or \Envelope{}. The contents are split into one or more \Page{}s and encrypted with an AES-256 Entry Encryption Key (EEK). The IDs of each of these pages are stored in an \Entry{} along with encrypted metadata. The EEK is encrypted with a ECDH Key Encryption Key (KEK) and stored with the \Entry{} ID in an \Envelope{}. Multiple \Envelope{}s are usually generated for a single \Entry{} since one often wants to share an \Entry{} with multiple recipients.}
-	\label{fig:documents}
-\end{figure}
 
 \subsubsection{Page}
 A \Page{} contains some or all of the content for a single document. The maximum \Page {} content size is 2 MB\footnote{This maximum page size conveys our assumption that large clinical records are split up into small, granular documents. For example, a patient's clinical history with a doctor might be split up into individual records for each encounter.}, from our assumption that at least 50\% of documents will have sizes less than 2 MB. For now, our pagination strategy is very simple: we just split the (compressed) plaintext of the content into consecutive 2 MB chunks. We expect that this straightforward approach, combined with a reasonable replication strategy (e.g., 3-5x) will be sufficient to ensure clients always have access to the requisite chunks required to reconstruct their document. If this assumption proves problematic, we can always implement more sophisticated chunking via erasure coding in the clients. The Libri server code is agnostic to the chunking strategy.
@@ -197,13 +200,6 @@ Since usually an author wants to be able to later read a document they create, t
 
 When they do want to share a document, they create a new \Envelope{} re-encrypting the EEK using the KEK derived from the shared ECDH secret between one of their author key-pairs and one of the reader. One must then only monitor the \Envelope{} publications for those with author or reader public keys that they know they own in order to see what \Entry{}s they can decrypt.
 
-\begin{figure}[thp]
-	\centering
-	\includegraphics[width=\textwidth]{figs/document-diagram-v2.pdf}
-	\caption{Diagram of essential document components and relationships.}
-	\label{fig:documents}
-\end{figure}
-
 \subsubsection{Publication}
 
 \Envelope{} storage events are gossiped between Librarian peers in the form of \Publication{} messages, which are exchanged via the streaming \ttt{Subscribe} request from one peer to another. A \Publication{} contains a subset of the fields of the \Envelope{}:
@@ -235,6 +231,8 @@ Downloading a document follows a similar pattern in reverse. The Author client f
 When one author wants to share a document with another (which we designate the reader), they only need to create a new \Envelope{}, since the reader just needs to receive the (encrypted) EEK rather than the whole document re-encrypted. The author gets one of the reader's public keys \footnote{The author gets one of the reader's public keys either directly via email or QR code or indirectly via a 3rd party that the Reader has registered some of its public keys with} and samples one of its own key-pairs to construct the KEK. The author then encrypts the EEK with the new KEK and includes its public key, the reader's public key, the key of the \Entry{} it is sharing, and the EEK ciphertext in the newly constructed \Envelope{}. 
 
 Each client maintains two sets of key-pairs: author keys and reader keys. Technically, each client could just have a single key-pair they use to send and receive documents. But if every entity using Libri only had a single key-pair identifying them, one could potentially re-identify patients based on their (data-sharing) relationships with doctors. Similar re-identification attacks have been shown to be successful on ``anonymized" credit card transactions. Since even the knowledge that a patient visits a particular doctor is protected health information (PHI), clients must have more than one key-pair. For a further layer of anonymity, the keys clients use to send documents (the author keys) are distinct from those they use to receive them (the reader keys). This distinction means that knowing one of they keys a doctor uses to receive documents a patient might share with them does not let the patient see even a subset of the documents that doctor is sharing with other patients. In our initial Author client implementation, each Author has 64 author key-pairs and 64 reader key-pairs. Each key-pair is individually encrypted via scrypt \cite{scrypt} using a master password.
+
+\section{Considerations}
 
 \subsection{Incentives \& Authorization}
 \label{sec:Incentives}
@@ -290,19 +288,21 @@ Librarians use RocksDB for local storage. RocksDB is an embedded key-value store
 
 
 \subsection{Hypothetical organization's setup}
-% TODO diagram ??
+
+\begin{figure}[tp]
+	\centering
+	\includegraphics[width=\textwidth]{figs/org-diagram-v1.pdf}
+	\caption{A hypothetical set of Libri users. Larger organizations like health sytems, payers, and health tech companies run their own Librarian nodes. Consumer-facing tools, analytics, and other third party applications use a Libri proxy service maintained by a tech company.}
+	\label{fig:org-setup}
+\end{figure}
+
 An organization runs peers to get read/write access to the DHT as well as the stream of all publication events. A modest integration might look like the following.
 
 The organization runs 8 peers that bootstrap from long-lived peers and introduce themselves to the rest of the Libri network. They may also have an internal service that uses the Author client library to proxy Put and Get requests to Libri via their 8 Librarian peers. This service may also send publication notifications on to an internal message bus (like Kafka) or filter them down to only those involving that organization (via their set of public keys). If they see that someone just shared a document with one of their public keys, they could then use Author client library download, decrypt, decompress, and concatenate the relevant Pages before storing in their own internal data system (which presumably uses its own encryption at rest and in transit).
 
 Smaller organizations and almost all consumers will not want to run their own peers. We expect an ecosystem of \nth{3}-party companies to build consumer-facing apps and APIs that will proxy access to the data in Libri much like companies like Coinbase proxy a consumer's access to the underlying Bitcoin network.
 
-\begin{figure}[h]
-	\centering
-	\includegraphics[width=\textwidth]{figs/org-diagram-v1.pdf}
-	\label{fig:documents}
-\end{figure}
-
+Figure \ref{fig:org-setup} shows a schematic of such a setup.
 \section{Experiments}
 \label{sec:exps}
 Decentralized storage systems like IPFS, Sia, and Storj have existed for at least a few years, but we have found very few empirical examinations of their performance. We believe that part of the evaluation for storage systems like these should include how efficiently they are able to handle the routine operations required of them. Below we describe some preliminary experiments on ephemeral Libri clusters. All the configuration and results for the experiments in their paper are publicly available\footnote{\url{https://github.com/drausin/libri-experiments/tree/develop/experiments/exp03}}.
@@ -374,6 +374,9 @@ The next large technical hurdle is ramping up integrations with healthcare organ
 
 \section{Conclusion}
 The field of decentralized storage is still in its infancy, with few networks supporting true production loads. The network designs that do exist have few performance studies to give confidence that they can in fact support the production loads they aim to. Libri is intended to be simple and opinionated, which frees it from many of the challenges (e.g., consensus protocols, incentives) associated with other decentralized systems. Documents are encrypted and shared between parties through a very explicit API, and these documents are kept replicated by the network as a whole. Preliminary experimental results indicate that Libri networks exhibit very good request latency, rate, and throughput properties, giving us confidence that we can immediately begin testing a persistent cluster with production-level load. 
+
+\section*{Acknowledgements}
+We are grateful in particular to Diran Li, John Urbanik, and Punya Biswal for helpful discussions and suggestions around Libri design and draft reading.
 
 \begin{appendices}
 
