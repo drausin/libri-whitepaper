@@ -197,6 +197,13 @@ Since usually an author wants to be able to later read a document they create, t
 
 When they do want to share a document, they create a new \Envelope{} re-encrypting the EEK using the KEK derived from the shared ECDH secret between one of their author key-pairs and one of the reader. One must then only monitor the \Envelope{} publications for those with author or reader public keys that they know they own in order to see what \Entry{}s they can decrypt.
 
+\begin{figure}[thp]
+	\centering
+	\includegraphics[width=\textwidth]{figs/document-diagram-v2.pdf}
+	\caption{Diagram of essential document components and relationships.}
+	\label{fig:documents}
+\end{figure}
+
 \subsubsection{Publication}
 
 \Envelope{} storage events are gossiped between Librarian peers in the form of \Publication{} messages, which are exchanged via the streaming \ttt{Subscribe} request from one peer to another. A \Publication{} contains a subset of the fields of the \Envelope{}:
@@ -290,6 +297,11 @@ The organization runs 8 peers that bootstrap from long-lived peers and introduce
 
 Smaller organizations and almost all consumers will not want to run their own peers. We expect an ecosystem of \nth{3}-party companies to build consumer-facing apps and APIs that will proxy access to the data in Libri much like companies like Coinbase proxy a consumer's access to the underlying Bitcoin network.
 
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=\textwidth]{figs/org-diagram-v1.pdf}
+	\label{fig:documents}
+\end{figure}
 
 \section{Experiments}
 \label{sec:exps}
@@ -323,7 +335,7 @@ Request latencies were measured via the \nth{50}- and \nth{95}-percentile values
 
 \subsubsection{Results and Discussion}
 
-\begin{figure}[t]
+\begin{figure}?
 	\centering
 	\includegraphics[width=\textwidth]{figs/latencies.pdf}
 	\caption{\Get{} and \Put{} request median (p50) and \nth{95} percentile (p95) latencies across different cluster sizes and user loads. Each colored line denotes a different user load, in uploads per day.}
